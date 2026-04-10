@@ -64,6 +64,9 @@ function computeMetrics(records, targetFilters = {}) {
                     totalCollected: 0,
                     timeSlots: [],
                     staffBooking: 0, // specific just for staff bookings not counting packages
+                    shop: 0,
+                    shopB: 0,
+                    walkIn: 0
                 };
             }
 
@@ -74,6 +77,12 @@ function computeMetrics(records, targetFilters = {}) {
                 // Wait: Did they restrict Package from Staff Booking count?
                 // Rule 6: "Package counts as booking activity but NOT as money".
                 staffDailyDict[normStaff].staffBooking++; 
+            } else if (r.type === 'Shop') {
+                staffDailyDict[normStaff].shop++;
+            } else if (r.type === 'ShopB') {
+                staffDailyDict[normStaff].shopB++;
+            } else if (r.type === 'Walk-in') {
+                staffDailyDict[normStaff].walkIn++;
             }
             
             if (r.time_in && r.time_out) {
