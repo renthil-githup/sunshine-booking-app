@@ -74,8 +74,8 @@ app.post('/send-telegram-report', async (req, res) => {
 });
 
 console.log("[SCHEDULER] Initializing daily auto-send cron job...");
-cron.schedule('30 22 * * *', async () => {
-    console.log("[SCHEDULER] Cron job triggered at 22:30 Singapore time.");
+cron.schedule('30 14 * * *', async () => {
+    console.log("[SCHEDULER] Cron job triggered at 14:30 UTC (22:30 SGT).");
     
     if (!lastReceivedReportText) {
         console.log("[SCHEDULER] No report available for auto send");
@@ -114,9 +114,9 @@ cron.schedule('30 22 * * *', async () => {
     }
 }, {
     scheduled: true,
-    timezone: "Asia/Singapore"
+    timezone: "UTC"
 });
-console.log("[SCHEDULER] Cron job scheduled for 22:30 Asia/Singapore.");
+console.log("[SCHEDULER] Cron job scheduled for 14:30 UTC (22:30 SGT).");
 
 app.listen(PORT, () => {
     console.log(`[STARTUP] Backend server successfully started.`);
