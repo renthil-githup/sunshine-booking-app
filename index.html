@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sales & Booking App</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS for Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Main Content Area -->
+        <main id="main-content"></main>
+
+        <!-- Bottom Navigation -->
+        <nav id="bottom-nav">
+            <button class="nav-btn active" data-tab="entry">
+                <i data-lucide="plus-circle"></i>
+                <span>Entry</span>
+            </button>
+            <button class="nav-btn" data-tab="records">
+                <i data-lucide="list"></i>
+                <span>Records</span>
+            </button>
+            <button class="nav-btn" data-tab="reports">
+                <i data-lucide="bar-chart-2"></i>
+                <span>Reports</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/metrics.js"></script>
+    <script src="js/components.js"></script>
+    <script src="js/exportExcel.js"></script>
+    <script src="js/screens/entry.js"></script>
+    <script src="js/screens/records.js"></script>
+    <script src="js/screens/reports.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
