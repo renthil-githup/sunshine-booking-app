@@ -239,6 +239,13 @@ async function handleSendTelegram() {
     btn.innerHTML = '<i data-lucide="loader"></i> Sending...';
     if (window.lucide) lucide.createIcons();
 
+    let wakeupTimer = setTimeout(() => {
+        if (btn.disabled) {
+            btn.innerHTML = '<i data-lucide="loader"></i> Backend waking up...';
+            if (window.lucide) lucide.createIcons();
+        }
+    }, 5000);
+
     try {
         const allRecords = Data.getRecords();
         let filteredRecords = [];
@@ -318,10 +325,12 @@ async function handleSendTelegram() {
             })
         });
 
+        clearTimeout(wakeupTimer);
+
         const result = await response.json();
         
         if (result.success) {
-            btn.innerHTML = '<i data-lucide="check"></i> Sent!';
+            btn.innerHTML = '<i data-lucide="check-circle"></i> Successfully Sent!';
             if (window.lucide) lucide.createIcons();
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
@@ -334,13 +343,14 @@ async function handleSendTelegram() {
 
     } catch (err) {
         console.error(err);
-        btn.innerHTML = '<i data-lucide="alert-circle"></i> Error!';
+        if (typeof wakeupTimer !== 'undefined') clearTimeout(wakeupTimer);
+        btn.innerHTML = `<i data-lucide="alert-circle"></i> ${err.message}`;
         if (window.lucide) lucide.createIcons();
         setTimeout(() => {
             btn.innerHTML = originalHtml;
             btn.disabled = false;
             if (window.lucide) lucide.createIcons();
-        }, 3000);
+        }, 5000);
     }
 }
 
