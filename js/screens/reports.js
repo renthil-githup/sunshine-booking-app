@@ -280,19 +280,48 @@ async function handleSendTelegram() {
 
             reportText += `${title}\n\n`;
             reportText += `Total Collected: $${metrics.totalCollected}\n`;
-            reportText += `Cash: $${metrics.cashTotal}\n`;
-            reportText += `PayNow: $${metrics.payNowTotal}\n`;
+            
+            if (currentReportType === 'daily') {
+                if (metrics.cashTotal > 0) reportText += `Cash: $${metrics.cashTotal}\n`;
+                if (metrics.payNowTotal > 0) reportText += `PayNow: $${metrics.payNowTotal}\n`;
+            } else {
+                reportText += `Cash: $${metrics.cashTotal}\n`;
+                reportText += `PayNow: $${metrics.payNowTotal}\n`;
+            }
+            
             reportText += `Total Bookings: ${metrics.totalBookings}\n`;
-            reportText += `Booking: ${tCounts.Booking}\n`;
-            reportText += `Shop: ${tCounts.Shop}\n`;
-            reportText += `ShopB: ${tCounts.ShopB}\n`;
-            reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
-            reportText += `Package Count: ${metrics.packageCount}\n\n`;
+            
+            if (currentReportType === 'daily') {
+                if (tCounts.Booking > 0) reportText += `Booking: ${tCounts.Booking}\n`;
+                if (tCounts.Shop > 0) reportText += `Shop: ${tCounts.Shop}\n`;
+                if (tCounts.ShopB > 0) reportText += `ShopB: ${tCounts.ShopB}\n`;
+                if (tCounts['Walk-in'] > 0) reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+                if (metrics.packageCount > 0) reportText += `Package Count: ${metrics.packageCount}\n`;
+                reportText += `\n`;
+            } else {
+                reportText += `Booking: ${tCounts.Booking}\n`;
+                reportText += `Shop: ${tCounts.Shop}\n`;
+                reportText += `ShopB: ${tCounts.ShopB}\n`;
+                reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+                reportText += `Package Count: ${metrics.packageCount}\n\n`;
+            }
 
             if (currentReportType === 'daily') {
                 reportText += `Staff Summary:\n`;
                 metrics.staffBreakdown.forEach(s => {
-                    reportText += `${s.name} | Booking: ${s.booking} | Cash: ${s.cash} | PayNow: ${s.payNow} | Total: ${s.totalCollected}\n`;
+                    const uniqueTimes = [...new Set(s.timeSlots)];
+                    const timeStr = uniqueTimes.length > 0 ? ` | Time: ${uniqueTimes.join(', ')}` : '';
+                    let staffLine = `${s.name}${timeStr}`;
+                    
+                    if (s.booking > 0) staffLine += ` | Booking: ${s.booking}`;
+                    if (s.shop > 0) staffLine += ` | Shop: ${s.shop}`;
+                    if (s.shopB > 0) staffLine += ` | ShopB: ${s.shopB}`;
+                    if (s.walkIn > 0) staffLine += ` | Walk-in: ${s.walkIn}`;
+                    if (s.cash > 0) staffLine += ` | Cash: ${s.cash}`;
+                    if (s.payNow > 0) staffLine += ` | PayNow: ${s.payNow}`;
+                    staffLine += ` | Total: ${s.totalCollected}\n`;
+                    
+                    reportText += staffLine;
                 });
             } else if (currentReportType === 'weekly') {
                 reportText += `Staff Performance:\n`;
