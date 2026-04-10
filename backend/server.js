@@ -1,7 +1,10 @@
 console.log("[BOOT] server.js file loaded");
 const express = require('express');
 const cors = require('cors');
+const cron = require('node-cron');
 require('dotenv').config();
+
+let lastReceivedReportText = null;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -24,6 +27,8 @@ app.post('/send-telegram-report', async (req, res) => {
         console.log('[DEBUG] Failure: request missing report_text');
         return res.status(400).json({ success: false, error: 'report_text is required' });
     }
+
+    lastReceivedReportText = report_text;
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -67,6 +72,51 @@ app.post('/send-telegram-report', async (req, res) => {
     
     console.log('[DEBUG] ---------------------------------------------------');
 });
+
+console.log("[SCHEDULER] Initializing daily auto-send cron job...");
+cron.schedule('30 22 * * *', async () => {
+    console.log("[SCHEDULER] Cron job triggered at 22:30 Singapore time.");
+    
+    if (!lastReceivedReportText) {
+        console.log("[SCHEDULER] No report available for auto send");
+        return;
+    }
+
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    
+    if (!botToken || !chatId) {
+        console.log("[SCHEDULER] Failure: Telegram credentials missing.");
+        return;
+    }
+
+    try {
+        const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                text: lastReceivedReportText,
+                parse_mode: 'HTML'
+            })
+        });
+
+        const data = await response.json();
+        
+        if (response.ok) {
+            console.log("[SCHEDULER] Success: Auto report sent via Telegram.");
+        } else {
+            console.log(`[SCHEDULER] Failure: Telegram API returned an error - ${data.description || 'Unknown error'}`);
+        }
+    } catch (err) {
+        console.error("[SCHEDULER] Failure exception:", err);
+    }
+}, {
+    scheduled: true,
+    timezone: "Asia/Singapore"
+});
+console.log("[SCHEDULER] Cron job scheduled for 22:30 Asia/Singapore.");
 
 app.listen(PORT, () => {
     console.log(`[STARTUP] Backend server successfully started.`);
