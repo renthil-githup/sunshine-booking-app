@@ -2,9 +2,11 @@ console.log("[BOOT] server.js file loaded");
 const express = require('express');
 const cors = require('cors');
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
-let lastReceivedReportText = null;
+const REPORT_FILE_PATH = path.join(__dirname, 'daily_report.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,7 +30,7 @@ app.post('/send-telegram-report', async (req, res) => {
         return res.status(400).json({ success: false, error: 'report_text is required' });
     }
 
-    lastReceivedReportText = report_text;
+    // lastReceivedReportText is no longer used for manual send
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -73,31 +75,80 @@ app.post('/send-telegram-report', async (req, res) => {
     console.log('[DEBUG] ---------------------------------------------------');
 });
 
-console.log("[SCHEDULER] Initializing daily auto-send cron job...");
-cron.schedule('30 14 * * *', async () => {
-    console.log("[SCHEDULER] Cron job triggered at 14:30 UTC (22:30 SGT).");
+app.post('/save-daily-report', (req, res) => {
+    console.log('[DEBUG] --- POST /save-daily-report request received ---');
+    const { report_type, report_date, report_text } = req.body;
     
-    if (!lastReceivedReportText) {
-        console.log("[SCHEDULER] No report available for auto send");
-        return;
+    if (report_type !== 'daily') {
+        return res.status(400).json({ success: false, error: 'Only daily reports are saved' });
     }
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
+    if (!report_text || !report_date) {
+        return res.status(400).json({ success: false, error: 'report_text and report_date are required' });
+    }
+
+    const payload = {
+        report_type,
+        report_date,
+        report_text,
+        saved_at: new Date().toISOString()
+    };
+
+    try {
+        fs.writeFileSync(REPORT_FILE_PATH, JSON.stringify(payload, null, 2), 'utf8');
+        console.log(`[DEBUG] Successfully saved daily report for ${report_date}`);
+        res.json({ success: true, message: 'Report saved locally' });
+    } catch (err) {
+        console.error('[DEBUG] Failed to save report:', err);
+        res.status(500).json({ success: false, error: 'Failed to save report' });
+    }
+});
+
+console.log("[SCHEDULER] Initializing daily auto-send cron job...");
+const CRON_SCHEDULE = process.env.TEST_CRON === 'true' ? '*/2 * * * *' : '30 14 * * *';
+
+cron.schedule(CRON_SCHEDULE, async () => {
+    console.log("[SCHEDULER] Cron job triggered.");
     
-    if (!botToken || !chatId) {
-        console.log("[SCHEDULER] Failure: Telegram credentials missing.");
+    const nowUtc = new Date();
+    // Explicitly use Singapore time to get YYYY-MM-DD
+    const sgtFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const currentSgtDateStr = sgtFormatter.format(nowUtc);
+    
+    console.log(`[SCHEDULER] Current UTC time: ${nowUtc.toISOString()}`);
+    console.log(`[SCHEDULER] Current Singapore date used for comparison: ${currentSgtDateStr}`);
+    
+    if (!fs.existsSync(REPORT_FILE_PATH)) {
+        console.log("[SCHEDULER] Failure: daily_report.json file not found. No valid daily report available for auto send");
         return;
     }
 
     try {
+        const fileData = fs.readFileSync(REPORT_FILE_PATH, 'utf8');
+        const report = JSON.parse(fileData);
+        
+        console.log(`[SCHEDULER] Found saved report from: ${report.report_date} (saved at ${report.saved_at})`);
+        
+        if (report.report_date !== currentSgtDateStr) {
+            console.log(`[SCHEDULER] Failure: Report date ${report.report_date} does not match today's SGT date ${currentSgtDateStr}. No valid daily report available for auto send`);
+            return;
+        }
+
+        const botToken = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_CHAT_ID;
+        
+        if (!botToken || !chatId) {
+            console.log("[SCHEDULER] Failure: Telegram credentials missing.");
+            return;
+        }
+
         const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: chatId,
-                text: lastReceivedReportText,
+                text: report.report_text,
                 parse_mode: 'HTML'
             })
         });
@@ -113,7 +164,7 @@ cron.schedule('30 14 * * *', async () => {
         console.error("[SCHEDULER] Failure exception:", err);
     }
 });
-console.log("[SCHEDULER] Cron job scheduled for 14:30 UTC (22:30 SGT).");
+console.log(`[SCHEDULER] Cron job scheduled with expression: ${CRON_SCHEDULE}`);
 
 app.listen(PORT, () => {
     console.log(`[STARTUP] Backend server successfully started.`);
