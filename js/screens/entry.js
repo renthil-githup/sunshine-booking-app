@@ -112,48 +112,71 @@ function renderEntryScreen(container) {
             amount: parseFloat(amountInput.value) || 0
         };
 
+        const backendType = record.type === 'Staff' ? 'Booking' : record.type;
+        let isoDate;
+        try {
+            isoDate = new Date(record.date).toISOString();
+        } catch (e) {
+            isoDate = new Date().toISOString(); 
+        }
+
+        const payload = {
+            staffName: rawStaff || "Unknown",
+            bookingType: backendType,
+            paymentType: record.paymentMethod,
+            amount: record.amount,
+            bookingAt: isoDate,
+            timeIn: record.time_in,
+            timeOut: record.time_out,
+            remarks: ""
+        };
+
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+        const prevText = submitBtn.innerHTML;
+
         if (id) {
-            Data.updateRecord(id, record);
-            alert('Record updated!');
-            currentEditId = null; // Exit edit mode
-            
-            // Refresh Reports automatically if needed
-            // Actually switch back to Records tab so user sees the change
-            if (window.AppMain && window.AppMain.switchTab) {
-                window.AppMain.switchTab('records');
-                return; // Early return to avoid wiping while switching
+            submitBtn.innerHTML = 'Updating...';
+            submitBtn.disabled = true;
+
+            console.log(`PUT payload:`, payload);
+
+            try {
+                const response = await fetch(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                submitBtn.innerHTML = prevText;
+                submitBtn.disabled = false;
+
+                if (response.ok && result.ok) {
+                    alert('Record updated!');
+                    currentEditId = null; 
+                    if (window.Data && window.Data.fetchBookingsFromBackend) {
+                        await window.Data.fetchBookingsFromBackend();
+                    }
+                    if (window.AppMain && window.AppMain.switchTab) {
+                        window.AppMain.switchTab('records');
+                        return; 
+                    }
+                } else {
+                    alert('Failed to update booking: ' + (result.error || 'Server error'));
+                    return; 
+                }
+            } catch (err) {
+                console.error(err);
+                submitBtn.innerHTML = prevText;
+                submitBtn.disabled = false;
+                alert('Network error: Could not contact backend.');
+                return;
             }
         } else {
-            // Replace localStorage saving with backend POST request
-            const backendType = record.type === 'Staff' ? 'Booking' : record.type;
-            
-            // Generate a valid ISO Date string from the date input
-            let isoDate;
-            try {
-                isoDate = new Date(record.date).toISOString();
-            } catch (e) {
-                isoDate = new Date().toISOString(); // fallback if invalid
-            }
+            submitBtn.innerHTML = 'Saving...';
+            submitBtn.disabled = true;
 
-            const payload = {
-                staffName: rawStaff || "Unknown",
-                bookingType: backendType,
-                paymentType: record.paymentMethod,
-                amount: record.amount,
-                bookingAt: isoDate,
-                timeIn: record.time_in,
-                timeOut: record.time_out,
-                remarks: ""
-            };
-            
-            const submitBtn = e.target.querySelector('button[type="submit"]');
-            const prevText = submitBtn.innerHTML;
-            
             try {
-                console.log('Sending payload:', payload);
-                submitBtn.innerHTML = 'Saving...';
-                submitBtn.disabled = true;
-
                 const response = await fetch('https://sunshine-backend-w14m.onrender.com/booking', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
