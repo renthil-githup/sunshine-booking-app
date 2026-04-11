@@ -133,59 +133,70 @@ function applyShortcut(shortcut) {
     renderReportsScreen(document.getElementById('main-content'));
 }
 
-function renderReportContent() {
+async function renderReportContent() {
     const contentDiv = document.getElementById('report-content');
     if (!contentDiv) return;
 
-    const allRecords = Data.getRecords();
-    let filteredRecords = [];
-
-    if (currentReportType === 'daily') {
-        filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'daily', null, null, selectedDailyDate);
-    } else {
-        filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'manual', customStartDate, customEndDate);
-    }
-
-    const metrics = Metrics.computeMetrics(filteredRecords);
-    let html = "";
+    const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'https://sunshine-backend-w14m.onrender.com';
+    let fetchUrl = '';
     
+    contentDiv.innerHTML = '<div style="padding:20px;text-align:center;"><i data-lucide="loader"></i> Loading report from backend...</div>';
+    if (window.lucide) lucide.createIcons();
+
     if (currentReportType === 'daily') {
-        html += Components.createDashboardHTML(metrics);
-        html += Components.createDailyStaffSessionsHTML(filteredRecords);
-        // REMOVE breakdown section completely for daily per instructions
+        fetchUrl = `${backendUrl}/report/daily?date=${selectedDailyDate}`;
     } else if (currentReportType === 'weekly') {
-        // Do NOT show dashboard/extra cards
-        html += Components.createWeeklyTableHTML(metrics.staffBreakdown, customStartDate, customEndDate);
-        // Do NOT show breakdown per instructions
+        fetchUrl = `${backendUrl}/report/weekly?startDate=${customStartDate}&endDate=${customEndDate}`;
     } else if (currentReportType === 'monthly') {
-        // Dashboard can remain for Monthly unless specified, user didn't explicitly forbid formatting cards for Monthly, but they did say Weekly: "Do NOT show dashboard". I will omit dashboard for monthly too to be clean.
-        // Wait: User said "KEEP: Monthly breakdown section below."
-        html += Components.createMonthlyGridHTML(metrics.monthlyMatrixRows, metrics.allStaffNames);
-        
-        // Breakdown Table (Monthly)
-        html += `<div class="card table-responsive"><h2>Monthly Breakdown</h2><table>`;
-        html += `
-            <thead><tr><th>Date</th><th>Cash</th><th>PayNow</th><th>Total</th><th>Booking</th></tr></thead>
-            <tbody>
-        `;
-        const breakdown = Metrics.getDailyBreakdown(filteredRecords);
-        breakdown.forEach(d => {
-            html += `<tr>
-                <td>${d.date}</td>
-                <td class="text-money">$${d.cash.toFixed(2)}</td>
-                <td class="text-money">$${d.payNow.toFixed(2)}</td>
-                <td class="text-money">$${d.totalCollected.toFixed(2)}</td>
-                <td class="text-booking">${d.booking}</td>
-            </tr>`;
-        });
-        html += `</tbody></table></div>`;
+        fetchUrl = `${backendUrl}/report/monthly?startDate=${customStartDate}&endDate=${customEndDate}`;
     }
 
-    contentDiv.innerHTML = html;
+    try {
+        const response = await fetch(fetchUrl);
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error);
 
-    // Auto-save daily report to backend
-    if (currentReportType === 'daily') {
-        saveDailyReportToBackend(selectedDailyDate, filteredRecords, metrics);
+        console.log(`Loaded ${currentReportType} report from backend`, data);
+
+        const metrics = data.metrics;
+        const filteredRecords = data.records;
+        const breakdownData = data.breakdown || [];
+        
+        let html = "";
+        
+        if (currentReportType === 'daily') {
+            html += Components.createDashboardHTML(metrics);
+            html += Components.createDailyStaffSessionsHTML(filteredRecords);
+        } else if (currentReportType === 'weekly') {
+            html += Components.createWeeklyTableHTML(metrics.staffBreakdown, customStartDate, customEndDate);
+        } else if (currentReportType === 'monthly') {
+            html += Components.createMonthlyGridHTML(metrics.monthlyMatrixRows, metrics.allStaffNames);
+            
+            html += `<div class="card table-responsive"><h2>Monthly Breakdown</h2><table>`;
+            html += `
+                <thead><tr><th>Date</th><th>Cash</th><th>PayNow</th><th>Total</th><th>Booking</th></tr></thead>
+                <tbody>
+            `;
+            breakdownData.forEach(d => {
+                html += `<tr>
+                    <td>${d.date}</td>
+                    <td class="text-money">$${d.cash.toFixed(2)}</td>
+                    <td class="text-money">$${d.payNow.toFixed(2)}</td>
+                    <td class="text-money">$${d.totalCollected.toFixed(2)}</td>
+                    <td class="text-booking">${d.booking}</td>
+                </tr>`;
+            });
+            html += `</tbody></table></div>`;
+        }
+
+        contentDiv.innerHTML = html;
+
+        if (currentReportType === 'daily') {
+            saveDailyReportToBackend(selectedDailyDate, filteredRecords, metrics);
+        }
+    } catch (err) {
+        console.error('Failed to load report:', err);
+        contentDiv.innerHTML = `<div style="color:red; padding:20px;">Failed to load report from backend: ${err.message}</div>`;
     }
 }
 
@@ -218,26 +229,32 @@ function setTab(tab) {
     renderReportsScreen(document.getElementById('main-content'));
 }
 
-function handleExport() {
-    const allRecords = Data.getRecords();
-    let filteredRecords = [];
-    if (currentReportType === 'daily') {
-        filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'daily', null, null, selectedDailyDate);
-    } else {
-        filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'manual', customStartDate, customEndDate);
-    }
-    
-    const metrics = Metrics.computeMetrics(filteredRecords);
-    let breakdownData = [];
-    if (currentReportType === 'monthly') {
-        breakdownData = Metrics.getDailyBreakdown(filteredRecords);
-    } else if (currentReportType === 'daily') {
-        breakdownData = filteredRecords;
-    }
-    
-    let dateStrContext = currentReportType === 'daily' ? selectedDailyDate : `${customStartDate} to ${customEndDate}`;
+async function handleExport() {
+    const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'https://sunshine-backend-w14m.onrender.com';
+    let fetchUrl = '';
 
-    ExportExcel.generateExcel(currentReportType, metrics, breakdownData, dateStrContext);
+    if (currentReportType === 'daily') {
+        fetchUrl = `${backendUrl}/report/daily?date=${selectedDailyDate}`;
+    } else if (currentReportType === 'weekly') {
+        fetchUrl = `${backendUrl}/report/weekly?startDate=${customStartDate}&endDate=${customEndDate}`;
+    } else if (currentReportType === 'monthly') {
+        fetchUrl = `${backendUrl}/report/monthly?startDate=${customStartDate}&endDate=${customEndDate}`;
+    }
+
+    try {
+        const res = await fetch(fetchUrl);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        
+        let breakdownData = [];
+        if (currentReportType === 'monthly') breakdownData = data.breakdown || [];
+        else if (currentReportType === 'daily') breakdownData = data.records;
+
+        let dateStrContext = currentReportType === 'daily' ? selectedDailyDate : `${customStartDate} to ${customEndDate}`;
+        ExportExcel.generateExcel(currentReportType, data.metrics, breakdownData, dateStrContext);
+    } catch (err) {
+        alert('Failed to fetch report for export: ' + err.message);
+    }
 }
 
 function resetView() {
@@ -273,24 +290,29 @@ async function handleSendTelegram() {
     }, 5000);
 
     try {
-        const allRecords = Data.getRecords();
-        let filteredRecords = [];
+        const apiBase = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'https://sunshine-backend-w14m.onrender.com';
+        let fetchUrl = '';
         let dateRangeStr = '';
         
         if (currentReportType === 'daily') {
-            filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'daily', null, null, selectedDailyDate);
+            fetchUrl = `${apiBase}/report/daily?date=${selectedDailyDate}`;
             dateRangeStr = formatTelegramDate(selectedDailyDate);
-        } else {
-            filteredRecords = Metrics.filterRecordsByDateRange(allRecords, 'manual', customStartDate, customEndDate);
+        } else if (currentReportType === 'weekly') {
+            fetchUrl = `${apiBase}/report/weekly?startDate=${customStartDate}&endDate=${customEndDate}`;
+            dateRangeStr = `${formatTelegramDate(customStartDate)} to ${formatTelegramDate(customEndDate)}`;
+        } else if (currentReportType === 'monthly') {
+            fetchUrl = `${apiBase}/report/monthly?startDate=${customStartDate}&endDate=${customEndDate}`;
             dateRangeStr = `${formatTelegramDate(customStartDate)} to ${formatTelegramDate(customEndDate)}`;
         }
-        
-        const metrics = Metrics.computeMetrics(filteredRecords);
-        const reportText = generateTelegramText(currentReportType, dateRangeStr, filteredRecords, metrics);
 
-        const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'http://localhost:3000';
+        const res = await fetch(fetchUrl);
+        const data = await res.json();
         
-        const response = await fetch(`${backendUrl}/send-telegram-report`, {
+        if (!data.ok) throw new Error(data.error);
+        
+        const reportText = generateTelegramText(currentReportType, dateRangeStr, data.records, data.metrics);
+
+        const response = await fetch(`${apiBase}/send-telegram-report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
