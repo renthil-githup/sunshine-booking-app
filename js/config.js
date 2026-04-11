@@ -3,13 +3,13 @@ const Config = {
 };
 
 async function fetchWithAuth(url, options = {}) {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     
     if (!token || token === 'null' || token === 'undefined' || token.trim() === '') {
         if (window.AppMain && window.AppMain.logout) {
             window.AppMain.logout();
         } else {
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
         }
         throw new Error("No token found. Login required.");
     }
@@ -28,7 +28,7 @@ async function fetchWithAuth(url, options = {}) {
         if (window.AppMain && window.AppMain.logout) {
             window.AppMain.logout();
         } else {
-            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
             location.reload();
         }
         throw new Error("Unauthorized");
