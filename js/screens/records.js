@@ -87,7 +87,7 @@ async function handleDelete(id) {
             if (btn) btn.innerHTML = '<i data-lucide="loader"></i>';
             if (window.lucide) lucide.createIcons();
 
-            const res = await fetch(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
+            const res = await window.fetchWithAuth(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

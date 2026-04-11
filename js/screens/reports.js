@@ -152,7 +152,7 @@ async function renderReportContent() {
     }
 
     try {
-        const response = await fetch(fetchUrl);
+        const response = await window.fetchWithAuth(fetchUrl);
         const data = await response.json();
         if (!data.ok) throw new Error(data.error);
 
@@ -208,7 +208,7 @@ async function saveDailyReportToBackend(dateStr, filteredRecords, metrics) {
         
         const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'http://localhost:3000';
         
-        fetch(`${backendUrl}/save-daily-report`, {
+        window.fetchWithAuth(`${backendUrl}/save-daily-report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -243,7 +243,7 @@ async function handleExport() {
     }
 
     try {
-        const res = await fetch(fetchUrl);
+        const res = await window.fetchWithAuth(fetchUrl);
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
         
@@ -306,14 +306,14 @@ async function handleSendTelegram() {
             dateRangeStr = `${formatTelegramDate(customStartDate)} to ${formatTelegramDate(customEndDate)}`;
         }
 
-        const res = await fetch(fetchUrl);
+        const res = await window.fetchWithAuth(fetchUrl);
         const data = await res.json();
         
         if (!data.ok) throw new Error(data.error);
         
         const reportText = generateTelegramText(currentReportType, dateRangeStr, data.records, data.metrics);
 
-        const response = await fetch(`${apiBase}/send-telegram-report`, {
+        const response = await window.fetchWithAuth(`${apiBase}/send-telegram-report`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
