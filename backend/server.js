@@ -112,9 +112,6 @@ cron.schedule('30 14 * * *', async () => {
     } catch (err) {
         console.error("[SCHEDULER] Failure exception:", err);
     }
-}, {
-    scheduled: true,
-    timezone: "UTC"
 });
 console.log("[SCHEDULER] Cron job scheduled for 14:30 UTC (22:30 SGT).");
 
