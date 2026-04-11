@@ -141,9 +141,8 @@ function renderEntryScreen(container) {
             console.log(`PUT payload:`, payload);
 
             try {
-                const response = await fetch(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
+                const response = await window.fetchWithAuth(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 
@@ -177,9 +176,8 @@ function renderEntryScreen(container) {
             submitBtn.disabled = true;
 
             try {
-                const response = await fetch('https://sunshine-backend-w14m.onrender.com/booking', {
+                const response = await window.fetchWithAuth('https://sunshine-backend-w14m.onrender.com/booking', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 
