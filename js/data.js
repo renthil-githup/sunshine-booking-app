@@ -13,7 +13,7 @@ function saveRecords(records) {
 
 async function fetchBookingsFromBackend() {
     try {
-        const res = await fetch('https://sunshine-backend-w14m.onrender.com/booking');
+        const res = await window.fetchWithAuth('https://sunshine-backend-w14m.onrender.com/booking');
         const json = await res.json();
         
         if (json.ok && json.bookings) {
