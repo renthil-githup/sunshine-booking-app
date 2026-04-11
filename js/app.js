@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkAuth() {
-        let token = localStorage.getItem('token');
+        let token = sessionStorage.getItem('token');
         if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '') {
             console.log("Token found, loading app");
             showApp();
@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loginBtn.disabled = false;
 
             if (res.ok && data.ok && data.token) {
-                localStorage.setItem('token', data.token);
+                sessionStorage.setItem('token', data.token);
                 showApp();
             } else {
                 loginError.textContent = data.error || 'Invalid credentials';
@@ -114,9 +114,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.logout = function() {
-        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
         requireLogin();
     };
+
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+        btnLogout.addEventListener('click', () => {
+            window.logout();
+        });
+    }
 
     window.AppMain = { switchTab, logout };
 
