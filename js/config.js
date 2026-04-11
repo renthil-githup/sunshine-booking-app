@@ -5,11 +5,11 @@ const Config = {
 async function fetchWithAuth(url, options = {}) {
     const token = localStorage.getItem('token');
     
-    if (!token) {
+    if (!token || token === 'null' || token === 'undefined' || token.trim() === '') {
         if (window.AppMain && window.AppMain.logout) {
             window.AppMain.logout();
         } else {
-            document.location.reload();
+            localStorage.removeItem('token');
         }
         throw new Error("No token found. Login required.");
     }
