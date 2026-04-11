@@ -33,6 +33,16 @@
     </div>
 
     <div id="app" style="display: none;">
+        <!-- Global Top Header -->
+        <header style="display:flex; justify-content:space-between; align-items:center; padding: 15px 20px; background:var(--card-bg); border-bottom:1px solid var(--border-color); flex-shrink: 0;">
+            <div style="font-weight:700; font-size:1.1rem; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+                <i data-lucide="sun"></i> Sunshine
+            </div>
+            <button id="btn-logout" style="background:none; border:none; color:#ef4444; font-weight:600; font-size:0.9rem; cursor:pointer; display:flex; align-items:center; gap:4px;">
+                <i data-lucide="log-out" style="width:16px; height:16px;"></i> Logout
+            </button>
+        </header>
+
         <!-- Main Content Area -->
         <main id="main-content"></main>
 
@@ -49,10 +59,6 @@
             <button class="nav-btn" data-tab="reports">
                 <i data-lucide="bar-chart-2"></i>
                 <span>Reports</span>
-            </button>
-            <button class="nav-btn" id="btn-logout" style="color: #ef4444;">
-                <i data-lucide="log-out"></i>
-                <span>Logout</span>
             </button>
         </nav>
     </div>
