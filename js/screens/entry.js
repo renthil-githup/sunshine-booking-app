@@ -126,20 +126,31 @@ function renderEntryScreen(container) {
         } else {
             // Replace localStorage saving with backend POST request
             const backendType = record.type === 'Staff' ? 'Booking' : record.type;
+            
+            // Generate a valid ISO Date string from the date input
+            let isoDate;
+            try {
+                isoDate = new Date(record.date).toISOString();
+            } catch (e) {
+                isoDate = new Date().toISOString(); // fallback if invalid
+            }
+
             const payload = {
                 staffName: rawStaff || "Unknown",
                 bookingType: backendType,
                 paymentType: record.paymentMethod,
                 amount: record.amount,
-                bookingAt: record.date,
+                bookingAt: isoDate,
                 timeIn: record.time_in,
-                timeOut: record.time_out
+                timeOut: record.time_out,
+                remarks: ""
             };
             
             const submitBtn = e.target.querySelector('button[type="submit"]');
             const prevText = submitBtn.innerHTML;
             
             try {
+                console.log('Sending payload:', payload);
                 submitBtn.innerHTML = 'Saving...';
                 submitBtn.disabled = true;
 
@@ -150,12 +161,13 @@ function renderEntryScreen(container) {
                 });
                 
                 const result = await response.json();
+                console.log('Backend response:', result);
                 
                 submitBtn.innerHTML = prevText;
                 submitBtn.disabled = false;
 
                 if (response.ok && result.ok) {
-                    alert('Booking saved successfully!');
+                    alert('Booking saved successfully');
                 } else {
                     alert('Failed to save booking: ' + (result.error || 'Server error'));
                     return; // Abort and keep user input
