@@ -157,6 +157,7 @@ async function renderReportContent() {
         if (!data.ok) throw new Error(data.error);
 
         console.log(`Loaded ${currentReportType} report from backend`, data);
+        console.log('Reports reloaded from backend');
 
         const metrics = data.metrics;
         const filteredRecords = data.records;
