@@ -168,6 +168,13 @@ function renderEntryScreen(container) {
 
                 if (response.ok && result.ok) {
                     alert('Booking saved successfully');
+                    if (window.Data && window.Data.fetchBookingsFromBackend) {
+                        await window.Data.fetchBookingsFromBackend();
+                    }
+                    // Optional: Reset form 
+                    // e.target.reset();
+                    // document.getElementById('record-id').value = '';
+                    // dateInput.valueAsDate = new Date();
                 } else {
                     alert('Failed to save booking: ' + (result.error || 'Server error'));
                     return; // Abort and keep user input
