@@ -17,7 +17,7 @@ async function fetchBookingsFromBackend() {
         const json = await res.json();
         
         if (json.ok && json.bookings) {
-            console.log('Bookings reloaded from backend');
+            console.log('Reloaded bookings from backend:', json.bookings);
             
             inMemoryRecords = json.bookings.map(b => ({
                 id: b._id,
