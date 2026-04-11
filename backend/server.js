@@ -40,6 +40,16 @@ app.get('/health', (req, res) => {
     res.json({ ok: true });
 });
 
+app.get('/booking', async (req, res) => {
+    try {
+        const bookings = await Booking.find({});
+        res.json({ ok: true, bookings });
+    } catch (err) {
+        console.error('[DEBUG] GET /booking error:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 app.post('/booking', async (req, res) => {
     try {
         const booking = new Booking(req.body);
