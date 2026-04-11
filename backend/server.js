@@ -378,6 +378,30 @@ app.post('/booking', async (req, res) => {
     }
 });
 
+app.put('/booking/:id', async (req, res) => {
+    try {
+        console.log(`Updating booking id: ${req.params.id}`);
+        const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!booking) return res.status(404).json({ ok: false, error: 'Booking not found' });
+        res.json({ ok: true, booking });
+    } catch (err) {
+        console.error('[DEBUG] /booking update error:', err);
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
+app.delete('/booking/:id', async (req, res) => {
+    try {
+        console.log(`Deleting booking id: ${req.params.id}`);
+        const booking = await Booking.findByIdAndDelete(req.params.id);
+        if (!booking) return res.status(404).json({ ok: false, error: 'Booking not found' });
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[DEBUG] /booking delete error:', err);
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
 app.post('/send-telegram-report', async (req, res) => {
     console.log('[DEBUG] --- POST /send-telegram-report request received ---');
     
