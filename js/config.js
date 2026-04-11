@@ -4,10 +4,18 @@ const Config = {
 
 async function fetchWithAuth(url, options = {}) {
     const token = localStorage.getItem('token');
-    if (!options.headers) options.headers = {};
-    if (token) {
-        options.headers['Authorization'] = `Bearer ${token}`;
+    
+    if (!token) {
+        if (window.AppMain && window.AppMain.logout) {
+            window.AppMain.logout();
+        } else {
+            document.location.reload();
+        }
+        throw new Error("No token found. Login required.");
     }
+
+    if (!options.headers) options.headers = {};
+    options.headers['Authorization'] = `Bearer ${token}`;
     
     if (!options.headers['Content-Type'] && options.body) {
         options.headers['Content-Type'] = 'application/json';
