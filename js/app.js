@@ -32,7 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initial load
-    switchTab('entry');
+    if (window.Data && window.Data.fetchBookingsFromBackend) {
+        window.Data.fetchBookingsFromBackend().then(() => {
+            switchTab('entry');
+        });
+    } else {
+        switchTab('entry');
+    }
     
     // Initialize icons for the base HTML
     if (window.lucide) {
