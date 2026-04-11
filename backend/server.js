@@ -180,6 +180,99 @@ function mapBookingToRecord(b) {
         amount: b.amount || 0
     };
 }
+
+function formatTelegramDate(ymd) {
+    if (!ymd) return '';
+    const parts = ymd.split('-');
+    if (parts.length !== 3) return ymd;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function generateTelegramText(reportType, dateRangeStr, filteredRecords, metrics) {
+    let reportText = '';
+
+    if (filteredRecords.length === 0) {
+        return `No records found for ${reportType === 'monthly' ? 'selected monthly range' : dateRangeStr}`;
+    }
+
+    let title = '';
+    if (reportType === 'daily') title = `Daily Report - ${dateRangeStr}`;
+    else if (reportType === 'weekly') title = `Weekly Report - ${dateRangeStr}`;
+    else if (reportType === 'monthly') title = `Monthly Report - ${dateRangeStr}`;
+
+    const tCounts = { Booking: 0, Shop: 0, ShopB: 0, 'Walk-in': 0 };
+    filteredRecords.forEach(r => {
+        if (r.type === 'Staff') tCounts.Booking++;
+        else if (r.type === 'Shop') tCounts.Shop++;
+        else if (r.type === 'ShopB') tCounts.ShopB++;
+        else if (r.type === 'Walk-in') tCounts['Walk-in']++;
+    });
+
+    reportText += `${title}\n\n`;
+    reportText += `Total Collected: $${metrics.totalCollected}\n`;
+    
+    if (reportType === 'daily') {
+        if (metrics.cashTotal > 0) reportText += `Cash: $${metrics.cashTotal}\n`;
+        if (metrics.payNowTotal > 0) reportText += `PayNow: $${metrics.payNowTotal}\n`;
+    } else {
+        reportText += `Cash: $${metrics.cashTotal}\n`;
+        reportText += `PayNow: $${metrics.payNowTotal}\n`;
+    }
+    
+    reportText += `Total Bookings: ${metrics.totalBookings}\n`;
+    
+    if (reportType === 'daily') {
+        if (tCounts.Booking > 0) reportText += `Booking: ${tCounts.Booking}\n`;
+        if (tCounts.Shop > 0) reportText += `Shop: ${tCounts.Shop}\n`;
+        if (tCounts.ShopB > 0) reportText += `ShopB: ${tCounts.ShopB}\n`;
+        if (tCounts['Walk-in'] > 0) reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+        if (metrics.packageCount > 0) reportText += `Package Count: ${metrics.packageCount}\n`;
+        reportText += `\n`;
+    } else {
+        reportText += `Booking: ${tCounts.Booking}\n`;
+        reportText += `Shop: ${tCounts.Shop}\n`;
+        reportText += `ShopB: ${tCounts.ShopB}\n`;
+        reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+        reportText += `Package Count: ${metrics.packageCount}\n\n`;
+    }
+
+    if (reportType === 'daily') {
+        reportText += `Staff Summary:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            const uniqueTimes = [...new Set(s.timeSlots)];
+            const timeStr = uniqueTimes.length > 0 ? ` | Time: ${uniqueTimes.join(', ')}` : '';
+            let staffLine = `${s.name}${timeStr}`;
+            
+            if (s.booking > 0) staffLine += ` | Booking: ${s.booking}`;
+            if (s.shop > 0) staffLine += ` | Shop: ${s.shop}`;
+            if (s.shopB > 0) staffLine += ` | ShopB: ${s.shopB}`;
+            if (s.walkIn > 0) staffLine += ` | Walk-in: ${s.walkIn}`;
+            if (s.cash > 0) staffLine += ` | Cash: ${s.cash}`;
+            if (s.payNow > 0) staffLine += ` | PayNow: ${s.payNow}`;
+            staffLine += ` | Total: ${s.totalCollected}\n`;
+            
+            reportText += staffLine;
+        });
+    } else if (reportType === 'weekly') {
+        reportText += `Staff Performance:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            reportText += `${s.name} | Staff Booking: ${s.staffBooking} | Total Amount: ${s.totalCollected}\n`;
+        });
+    } else if (reportType === 'monthly') {
+        reportText += `Monthly Staff Performance:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            reportText += `${s.name} | Staff Booking: ${s.staffBooking || s.booking} | Total Amount: ${s.totalCollected}\n`;
+        });
+
+        reportText += `\nMonthly Cash Flow Summary:\n`;
+        const dailyBreakdown = getDailyBreakdown(filteredRecords);
+        dailyBreakdown.forEach(d => {
+            reportText += `${formatTelegramDate(d.date)} | PayNow: ${d.payNow} | Cash: ${d.cash} | Total: ${d.totalCollected}\n`;
+        });
+    }
+    
+    return reportText;
+}
 // ==============================
 
 app.get('/health', (req, res) => {
@@ -375,37 +468,33 @@ console.log("[SCHEDULER] Initializing daily auto-send cron job...");
 const CRON_SCHEDULE = process.env.TEST_CRON === 'true' ? '*/2 * * * *' : '30 14 * * *';
 
 cron.schedule(CRON_SCHEDULE, async () => {
-    console.log("[SCHEDULER] Cron job triggered.");
+    console.log("Daily Telegram cron started");
     
-    const nowUtc = new Date();
-    // Explicitly use Singapore time to get YYYY-MM-DD
-    const sgtFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' });
-    const currentSgtDateStr = sgtFormatter.format(nowUtc);
-    
-    console.log(`[SCHEDULER] Current UTC time: ${nowUtc.toISOString()}`);
-    console.log(`[SCHEDULER] Current Singapore date used for comparison: ${currentSgtDateStr}`);
-    
-    if (!fs.existsSync(REPORT_FILE_PATH)) {
-        console.log("[SCHEDULER] Failure: daily_report.json file not found. No valid daily report available for auto send");
-        return;
-    }
-
     try {
-        const fileData = fs.readFileSync(REPORT_FILE_PATH, 'utf8');
-        const report = JSON.parse(fileData);
+        const nowUtc = new Date();
+        const sgtFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' });
+        const currentSgtDateStr = sgtFormatter.format(nowUtc);
         
-        console.log(`[SCHEDULER] Found saved report from: ${report.report_date} (saved at ${report.saved_at})`);
+        const start = new Date(currentSgtDateStr);
+        start.setUTCHours(0,0,0,0);
+        const end = new Date(currentSgtDateStr);
+        end.setUTCHours(23,59,59,999);
+
+        const bookings = await Booking.find({
+            bookingAt: { $gte: start, $lte: end }
+        });
+
+        const records = bookings.map(mapBookingToRecord);
+        const metrics = computeMetrics(records);
         
-        if (report.report_date !== currentSgtDateStr) {
-            console.log(`[SCHEDULER] Failure: Report date ${report.report_date} does not match today's SGT date ${currentSgtDateStr}. No valid daily report available for auto send`);
-            return;
-        }
+        const dateRangeStr = formatTelegramDate(currentSgtDateStr);
+        const reportText = generateTelegramText('daily', dateRangeStr, records, metrics);
 
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_CHAT_ID;
         
         if (!botToken || !chatId) {
-            console.log("[SCHEDULER] Failure: Telegram credentials missing.");
+            console.log("Daily Telegram report failed: Telegram credentials missing.");
             return;
         }
 
@@ -415,7 +504,7 @@ cron.schedule(CRON_SCHEDULE, async () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 chat_id: chatId,
-                text: report.report_text,
+                text: reportText,
                 parse_mode: 'HTML'
             })
         });
@@ -423,12 +512,12 @@ cron.schedule(CRON_SCHEDULE, async () => {
         const data = await response.json();
         
         if (response.ok) {
-            console.log("[SCHEDULER] Success: Auto report sent via Telegram.");
+            console.log("Daily Telegram report sent");
         } else {
-            console.log(`[SCHEDULER] Failure: Telegram API returned an error - ${data.description || 'Unknown error'}`);
+            console.log(`Daily Telegram report failed: ${data.description || 'Unknown error'}`);
         }
     } catch (err) {
-        console.error("[SCHEDULER] Failure exception:", err);
+        console.log("Daily Telegram report failed: Exception caught", err);
     }
 });
 console.log(`[SCHEDULER] Cron job scheduled with expression: ${CRON_SCHEDULE}`);
