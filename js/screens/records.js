@@ -70,6 +70,7 @@ function renderRecordsScreen(container) {
 }
 
 function handleEdit(id) {
+    console.log(`Clicked edit for booking id: ${id}`);
     if (window.EntryScreen && window.EntryScreen.fillForEdit) {
         window.EntryScreen.fillForEdit(id);
         if (window.AppMain && window.AppMain.switchTab) {
@@ -78,10 +79,35 @@ function handleEdit(id) {
     }
 }
 
-function handleDelete(id) {
+async function handleDelete(id) {
+    console.log(`Clicked delete for booking id: ${id}`);
     if (confirm("Are you sure you want to delete this record?")) {
-        Data.deleteRecord(id);
-        renderRecordsScreen(document.getElementById('main-content'));
+        try {
+            const btn = document.querySelector(`.action-btn.delete[onclick="RecordsScreen.handleDelete('${id}')"]`);
+            if (btn) btn.innerHTML = '<i data-lucide="loader"></i>';
+            if (window.lucide) lucide.createIcons();
+
+            const res = await fetch(`https://sunshine-backend-w14m.onrender.com/booking/${id}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            
+            console.log(`DELETE response:`, data);
+            
+            if (res.ok && data.ok) {
+                if (window.Data && window.Data.fetchBookingsFromBackend) {
+                    await window.Data.fetchBookingsFromBackend();
+                }
+                renderRecordsScreen(document.getElementById('main-content'));
+            } else {
+                alert('Failed to delete: ' + (data.error || 'Server error'));
+                renderRecordsScreen(document.getElementById('main-content'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Network error during deletion');
+            renderRecordsScreen(document.getElementById('main-content'));
+        }
     }
 }
 
