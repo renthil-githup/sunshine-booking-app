@@ -36,8 +36,232 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// ====== REPORTING ENGINE ======
+function normalizeStaffName(name) {
+    return name ? name.toString().trim().toLowerCase() : '';
+}
+
+function capitalizeStaffName(name) {
+    if (!name) return '';
+    return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function computeMetrics(records) {
+    let cashTotal = 0;
+    let payNowTotal = 0;
+    let totalCollected = 0;
+    let totalBookings = records.length;
+    let staffCount = 0;
+    let shopCount = 0;
+    let walkInCount = 0;
+    let packageCount = 0;
+
+    let staffDailyDict = {}; 
+    let monthlyMatrix = {};  
+    let uniqueStaffSet = new Set();
+
+    records.forEach(r => {
+        if (r.type === 'Staff') staffCount++;
+        else if (r.type === 'Shop') shopCount++;
+        else if (r.type === 'Walk-in') walkInCount++;
+
+        let isPackage = (r.paymentMethod === 'Package');
+        let validAmount = isPackage ? 0 : r.amount;
+
+        if (isPackage) {
+            packageCount++;
+        } else {
+            if (r.paymentMethod === 'Cash') cashTotal += validAmount;
+            else if (r.paymentMethod === 'PayNow') payNowTotal += validAmount;
+            totalCollected += validAmount;
+        }
+
+        const normStaff = normalizeStaffName(r.staff);
+
+        if (normStaff) {
+            uniqueStaffSet.add(normStaff);
+            
+            if (!staffDailyDict[normStaff]) {
+                staffDailyDict[normStaff] = { 
+                    name: capitalizeStaffName(normStaff),
+                    rawName: normStaff,
+                    booking: 0, cash: 0, payNow: 0, totalCollected: 0,
+                    timeSlots: [],
+                    staffBooking: 0,
+                    shop: 0, shopB: 0, walkIn: 0
+                };
+            }
+
+            if (r.type === 'Staff') {
+                staffDailyDict[normStaff].booking++;
+                staffDailyDict[normStaff].staffBooking++; 
+            } else if (r.type === 'Shop') {
+                staffDailyDict[normStaff].shop++;
+            } else if (r.type === 'ShopB') {
+                staffDailyDict[normStaff].shopB++;
+            } else if (r.type === 'Walk-in') {
+                staffDailyDict[normStaff].walkIn++;
+            }
+            
+            if (r.time_in && r.time_out) {
+                staffDailyDict[normStaff].timeSlots.push(`${r.time_in}-${r.time_out}`);
+            }
+
+            if (r.paymentMethod === 'Cash') {
+                staffDailyDict[normStaff].cash += validAmount;
+                staffDailyDict[normStaff].totalCollected += validAmount;
+            } else if (r.paymentMethod === 'PayNow') {
+                staffDailyDict[normStaff].payNow += validAmount;
+                staffDailyDict[normStaff].totalCollected += validAmount;
+            }
+
+            if (!monthlyMatrix[r.date]) {
+                monthlyMatrix[r.date] = { date: r.date };
+            }
+            if (!monthlyMatrix[r.date][normStaff]) {
+                monthlyMatrix[r.date][normStaff] = { booking: 0, amount: 0 };
+            }
+            
+            if (r.type === 'Staff') {
+                monthlyMatrix[r.date][normStaff].booking++;
+            }
+            monthlyMatrix[r.date][normStaff].amount += validAmount;
+        }
+    });
+
+    Object.values(staffDailyDict).forEach(s => {
+        s.timeSlots.sort((a, b) => a.localeCompare(b));
+    });
+
+    const allStaffNames = Array.from(uniqueStaffSet).sort();
+    const monthlyMatrixRows = Object.values(monthlyMatrix).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    return {
+        cashTotal, payNowTotal, totalCollected, totalBookings,
+        staffCount, shopCount, walkInCount, packageCount,
+        staffBreakdown: Object.values(staffDailyDict).sort((a,b) => a.name.localeCompare(b.name)),
+        monthlyMatrixRows: monthlyMatrixRows,
+        allStaffNames: allStaffNames
+    };
+}
+
+function getDailyBreakdown(records) {
+    const grouped = {};
+    records.forEach(r => {
+        if (!grouped[r.date]) {
+            grouped[r.date] = { date: r.date, cash: 0, payNow: 0, totalCollected: 0, booking: 0 };
+        }
+        grouped[r.date].booking++;
+        let val = r.paymentMethod !== 'Package' ? r.amount : 0;
+        if (r.paymentMethod === 'Cash') grouped[r.date].cash += val;
+        if (r.paymentMethod === 'PayNow') grouped[r.date].payNow += val;
+        grouped[r.date].totalCollected += val;
+    });
+    return Object.values(grouped).sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function mapBookingToRecord(b) {
+    let dateStr = "";
+    if (b.bookingAt) {
+        try {
+            dateStr = b.bookingAt.toISOString().split('T')[0];
+        } catch(e) {
+            dateStr = b.bookingAt.toString();
+        }
+    }
+    return {
+        id: b._id.toString(),
+        date: dateStr,
+        time_in: b.timeIn || '',
+        time_out: b.timeOut || '',
+        staff: b.staffName ? b.staffName.toLowerCase() : '',
+        type: b.bookingType === 'Booking' ? 'Staff' : b.bookingType,
+        paymentMethod: b.paymentType,
+        amount: b.amount || 0
+    };
+}
+// ==============================
+
 app.get('/health', (req, res) => {
     res.json({ ok: true });
+});
+
+// GET endpoints for REPORTS
+app.get('/report/daily', async (req, res) => {
+    try {
+        const { date } = req.query;
+        if (!date) return res.status(400).json({ ok: false, error: 'date query param required' });
+        
+        // Match standard YYYY-MM-DD
+        const start = new Date(date);
+        start.setUTCHours(0,0,0,0);
+        const end = new Date(date);
+        end.setUTCHours(23,59,59,999);
+
+        const bookings = await Booking.find({
+            bookingAt: { $gte: start, $lte: end }
+        });
+
+        const records = bookings.map(mapBookingToRecord);
+        const metrics = computeMetrics(records);
+        
+        console.log(`Loaded daily report from backend for ${date}`);
+        res.json({ ok: true, metrics, records });
+    } catch (err) {
+        console.error('[DEBUG] /report/daily error:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/report/weekly', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) return res.status(400).json({ ok: false, error: 'startDate and endDate required' });
+
+        const start = new Date(startDate);
+        start.setUTCHours(0,0,0,0);
+        const end = new Date(endDate);
+        end.setUTCHours(23,59,59,999);
+
+        const bookings = await Booking.find({
+            bookingAt: { $gte: start, $lte: end }
+        });
+
+        const records = bookings.map(mapBookingToRecord);
+        const metrics = computeMetrics(records);
+        
+        console.log(`Loaded weekly report from backend for ${startDate} to ${endDate}`);
+        res.json({ ok: true, metrics, records });
+    } catch (err) {
+        console.error('[DEBUG] /report/weekly error:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/report/monthly', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        if (!startDate || !endDate) return res.status(400).json({ ok: false, error: 'startDate and endDate required' });
+
+        const start = new Date(startDate);
+        start.setUTCHours(0,0,0,0);
+        const end = new Date(endDate);
+        end.setUTCHours(23,59,59,999);
+
+        const bookings = await Booking.find({
+            bookingAt: { $gte: start, $lte: end }
+        });
+
+        const records = bookings.map(mapBookingToRecord);
+        const metrics = computeMetrics(records);
+        const breakdown = getDailyBreakdown(records);
+        
+        console.log(`Loaded monthly report from backend for ${startDate} to ${endDate}`);
+        res.json({ ok: true, metrics, records, breakdown });
+    } catch (err) {
+        console.error('[DEBUG] /report/monthly error:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
 app.get('/booking', async (req, res) => {
