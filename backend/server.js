@@ -4,6 +4,7 @@ const cors = require('cors');
 const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 const REPORT_FILE_PATH = path.join(__dirname, 'daily_report.json');
@@ -166,7 +167,17 @@ cron.schedule(CRON_SCHEDULE, async () => {
 });
 console.log(`[SCHEDULER] Cron job scheduled with expression: ${CRON_SCHEDULE}`);
 
-app.listen(PORT, () => {
-    console.log(`[STARTUP] Backend server successfully started.`);
-    console.log(`[STARTUP] Listening on PORT: ${PORT}`);
-});
+// URL-encoded the '@' symbol in the password as '%40' to prevent MongoParseError
+const MONGO_URI = "mongodb+srv://renthil_db_user:Yuvaraaj%40365@renthil.zw4akgy.mongodb.net/?appName=renthilappName=renthil";
+
+mongoose.connect(MONGO_URI)
+    .then(() => {
+        console.log("MongoDB Connected");
+        app.listen(PORT, () => {
+            console.log(`[STARTUP] Backend server successfully started.`);
+            console.log(`[STARTUP] Listening on PORT: ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error("MongoDB connection failed:", err);
+    });
