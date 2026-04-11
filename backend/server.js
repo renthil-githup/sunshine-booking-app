@@ -5,7 +5,18 @@ const cron = require('node-cron');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_12345';
+
+const userSchema = new mongoose.Schema({
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    role: { type: String, default: 'admin' }
+});
+const User = mongoose.model('User', userSchema);
 
 const REPORT_FILE_PATH = path.join(__dirname, 'daily_report.json');
 
@@ -279,6 +290,49 @@ app.get('/health', (req, res) => {
     res.json({ ok: true });
 });
 
+app.post('/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+        }
+        
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+        }
+        
+        const token = jwt.sign(
+            { id: user._id, username: user.username, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        
+        res.json({ ok: true, token, username: user.username, role: user.role });
+    } catch (err) {
+        console.error('[DEBUG] Login error:', err);
+        res.status(500).json({ ok: false, error: 'Internal server error' });
+    }
+});
+
+function verifyToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return res.status(401).json({ ok: false, error: 'No token provided. Session expired. Please log in again.' });
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ ok: false, error: 'Malformed token. Session expired. Please log in again.' });
+    
+    jwt.verify(token, JWT_SECRET, (err, decoded) => {
+        if (err) return res.status(401).json({ ok: false, error: 'Invalid or expired token. Session expired. Please log in again.' });
+        req.user = decoded;
+        next();
+    });
+}
+
+// ALL ROUTES BELOW REQUIRE AUTHENTICATION
+app.use(verifyToken);
+
 // GET endpoints for REPORTS
 app.get('/report/daily', async (req, res) => {
     try {
@@ -363,6 +417,16 @@ app.get('/booking', async (req, res) => {
         res.json({ ok: true, bookings });
     } catch (err) {
         console.error('[DEBUG] GET /booking error:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/bookings', async (req, res) => {
+    try {
+        const bookings = await Booking.find({});
+        res.json({ ok: true, bookings });
+    } catch (err) {
+        console.error('[DEBUG] GET /bookings error:', err);
         res.status(500).json({ ok: false, error: err.message });
     }
 });
@@ -549,9 +613,28 @@ console.log(`[SCHEDULER] Cron job scheduled with expression: ${CRON_SCHEDULE}`);
 // URL-encoded the '@' symbol in the password as '%40' to prevent MongoParseError
 const MONGO_URI = "mongodb+srv://renthil_db_user:Yuvaraaj%40365@renthil.zw4akgy.mongodb.net/?appName=renthilappName=renthil";
 
+async function initDefaultUser() {
+    try {
+        const count = await User.countDocuments();
+        if (count === 0) {
+            const hashedPassword = await bcrypt.hash('Admin@12345', 10);
+            const admin = new User({
+                username: 'admin',
+                password: hashedPassword,
+                role: 'admin'
+            });
+            await admin.save();
+            console.log("Default admin created: admin / Admin@12345");
+        }
+    } catch (err) {
+        console.error("Failed to initialize default user:", err);
+    }
+}
+
 mongoose.connect(MONGO_URI)
-    .then(() => {
+    .then(async () => {
         console.log("MongoDB Connected");
+        await initDefaultUser();
         app.listen(PORT, () => {
             console.log(`[STARTUP] Backend server successfully started.`);
             console.log(`[STARTUP] Listening on PORT: ${PORT}`);
