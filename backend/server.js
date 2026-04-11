@@ -9,6 +9,27 @@ require('dotenv').config();
 
 const REPORT_FILE_PATH = path.join(__dirname, 'daily_report.json');
 
+const bookingSchema = new mongoose.Schema({
+    staffName: { type: String, required: true },
+    bookingType: { 
+        type: String, 
+        required: true, 
+        enum: ["Booking", "Shop", "ShopB", "Walk-in", "Package"] 
+    },
+    paymentType: { 
+        type: String, 
+        required: true, 
+        enum: ["Cash", "PayNow", "Package"] 
+    },
+    amount: { type: Number, required: true },
+    bookingAt: { type: Date, required: true },
+    timeIn: { type: String },
+    timeOut: { type: String },
+    remarks: { type: String }
+}, { timestamps: true });
+
+const Booking = mongoose.model('Booking', bookingSchema);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,6 +38,17 @@ app.use(express.json());
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });
+});
+
+app.post('/booking', async (req, res) => {
+    try {
+        const booking = new Booking(req.body);
+        const savedBooking = await booking.save();
+        res.json({ ok: true, booking: savedBooking });
+    } catch (err) {
+        console.error('[DEBUG] /booking creation error:', err);
+        res.status(400).json({ ok: false, error: err.message });
+    }
 });
 
 app.post('/send-telegram-report', async (req, res) => {
