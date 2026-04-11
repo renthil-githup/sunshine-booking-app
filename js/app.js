@@ -56,13 +56,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function requireLogin() {
         loginScreen.style.display = 'flex';
         appContainer.style.display = 'none';
+        
+        loginBtn.innerHTML = 'Log In';
+        loginBtn.disabled = false;
+        loginError.style.display = 'none';
+
+        console.log("Login screen ready");
     }
 
     function checkAuth() {
         let token = localStorage.getItem('token');
         if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '') {
+            console.log("Token found, loading app");
             showApp();
         } else {
+            console.log("No token found, showing login");
             requireLogin();
         }
     }
@@ -112,5 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.AppMain = { switchTab, logout };
 
+    console.log("App init start");
     checkAuth();
 });
