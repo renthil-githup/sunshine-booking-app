@@ -182,6 +182,32 @@ function renderReportContent() {
     }
 
     contentDiv.innerHTML = html;
+
+    // Auto-save daily report to backend
+    if (currentReportType === 'daily') {
+        saveDailyReportToBackend(selectedDailyDate, filteredRecords, metrics);
+    }
+}
+
+async function saveDailyReportToBackend(dateStr, filteredRecords, metrics) {
+    try {
+        const dateRangeStr = formatTelegramDate(dateStr);
+        const reportText = generateTelegramText('daily', dateRangeStr, filteredRecords, metrics);
+        
+        const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'http://localhost:3000';
+        
+        fetch(`${backendUrl}/save-daily-report`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                report_type: 'daily',
+                report_date: dateStr, 
+                report_text: reportText
+            })
+        }).catch(err => console.error("Silent save failure:", err));
+    } catch (e) {
+        console.error("Autosave wrapper exception:", e);
+    }
 }
 
 function setTab(tab) {
@@ -260,87 +286,7 @@ async function handleSendTelegram() {
         }
         
         const metrics = Metrics.computeMetrics(filteredRecords);
-        let reportText = '';
-
-        if (filteredRecords.length === 0) {
-            reportText = `No records found for ${currentReportType === 'monthly' ? 'selected monthly range' : dateRangeStr}`;
-        } else {
-            let title = '';
-            if (currentReportType === 'daily') title = `Daily Report - ${dateRangeStr}`;
-            else if (currentReportType === 'weekly') title = `Weekly Report - ${dateRangeStr}`;
-            else if (currentReportType === 'monthly') title = `Monthly Report - ${dateRangeStr}`;
-
-            const tCounts = { Booking: 0, Shop: 0, ShopB: 0, 'Walk-in': 0 };
-            filteredRecords.forEach(r => {
-                if (r.type === 'Staff') tCounts.Booking++;
-                else if (r.type === 'Shop') tCounts.Shop++;
-                else if (r.type === 'ShopB') tCounts.ShopB++;
-                else if (r.type === 'Walk-in') tCounts['Walk-in']++;
-            });
-
-            reportText += `${title}\n\n`;
-            reportText += `Total Collected: $${metrics.totalCollected}\n`;
-            
-            if (currentReportType === 'daily') {
-                if (metrics.cashTotal > 0) reportText += `Cash: $${metrics.cashTotal}\n`;
-                if (metrics.payNowTotal > 0) reportText += `PayNow: $${metrics.payNowTotal}\n`;
-            } else {
-                reportText += `Cash: $${metrics.cashTotal}\n`;
-                reportText += `PayNow: $${metrics.payNowTotal}\n`;
-            }
-            
-            reportText += `Total Bookings: ${metrics.totalBookings}\n`;
-            
-            if (currentReportType === 'daily') {
-                if (tCounts.Booking > 0) reportText += `Booking: ${tCounts.Booking}\n`;
-                if (tCounts.Shop > 0) reportText += `Shop: ${tCounts.Shop}\n`;
-                if (tCounts.ShopB > 0) reportText += `ShopB: ${tCounts.ShopB}\n`;
-                if (tCounts['Walk-in'] > 0) reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
-                if (metrics.packageCount > 0) reportText += `Package Count: ${metrics.packageCount}\n`;
-                reportText += `\n`;
-            } else {
-                reportText += `Booking: ${tCounts.Booking}\n`;
-                reportText += `Shop: ${tCounts.Shop}\n`;
-                reportText += `ShopB: ${tCounts.ShopB}\n`;
-                reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
-                reportText += `Package Count: ${metrics.packageCount}\n\n`;
-            }
-
-            if (currentReportType === 'daily') {
-                reportText += `Staff Summary:\n`;
-                metrics.staffBreakdown.forEach(s => {
-                    const uniqueTimes = [...new Set(s.timeSlots)];
-                    const timeStr = uniqueTimes.length > 0 ? ` | Time: ${uniqueTimes.join(', ')}` : '';
-                    let staffLine = `${s.name}${timeStr}`;
-                    
-                    if (s.booking > 0) staffLine += ` | Booking: ${s.booking}`;
-                    if (s.shop > 0) staffLine += ` | Shop: ${s.shop}`;
-                    if (s.shopB > 0) staffLine += ` | ShopB: ${s.shopB}`;
-                    if (s.walkIn > 0) staffLine += ` | Walk-in: ${s.walkIn}`;
-                    if (s.cash > 0) staffLine += ` | Cash: ${s.cash}`;
-                    if (s.payNow > 0) staffLine += ` | PayNow: ${s.payNow}`;
-                    staffLine += ` | Total: ${s.totalCollected}\n`;
-                    
-                    reportText += staffLine;
-                });
-            } else if (currentReportType === 'weekly') {
-                reportText += `Staff Performance:\n`;
-                metrics.staffBreakdown.forEach(s => {
-                    reportText += `${s.name} | Staff Booking: ${s.staffBooking} | Total Amount: ${s.totalCollected}\n`;
-                });
-            } else if (currentReportType === 'monthly') {
-                reportText += `Monthly Staff Performance:\n`;
-                metrics.staffBreakdown.forEach(s => {
-                    reportText += `${s.name} | Staff Booking: ${s.staffBooking || s.booking} | Total Amount: ${s.totalCollected}\n`;
-                });
-
-                reportText += `\nMonthly Cash Flow Summary:\n`;
-                const dailyBreakdown = window.Metrics.getDailyBreakdown(filteredRecords);
-                dailyBreakdown.forEach(d => {
-                    reportText += `${formatTelegramDate(d.date)} | PayNow: ${d.payNow} | Cash: ${d.cash} | Total: ${d.totalCollected}\n`;
-                });
-            }
-        }
+        const reportText = generateTelegramText(currentReportType, dateRangeStr, filteredRecords, metrics);
 
         const backendUrl = (window.Config && window.Config.API_BASE_URL) ? window.Config.API_BASE_URL : 'http://localhost:3000';
         
@@ -393,3 +339,89 @@ window.ReportsScreen = {
     resetView,
     handleSendTelegram
 };
+
+function generateTelegramText(reportType, dateRangeStr, filteredRecords, metrics) {
+    let reportText = '';
+
+    if (filteredRecords.length === 0) {
+        return `No records found for ${reportType === 'monthly' ? 'selected monthly range' : dateRangeStr}`;
+    }
+
+    let title = '';
+    if (reportType === 'daily') title = `Daily Report - ${dateRangeStr}`;
+    else if (reportType === 'weekly') title = `Weekly Report - ${dateRangeStr}`;
+    else if (reportType === 'monthly') title = `Monthly Report - ${dateRangeStr}`;
+
+    const tCounts = { Booking: 0, Shop: 0, ShopB: 0, 'Walk-in': 0 };
+    filteredRecords.forEach(r => {
+        if (r.type === 'Staff') tCounts.Booking++;
+        else if (r.type === 'Shop') tCounts.Shop++;
+        else if (r.type === 'ShopB') tCounts.ShopB++;
+        else if (r.type === 'Walk-in') tCounts['Walk-in']++;
+    });
+
+    reportText += `${title}\n\n`;
+    reportText += `Total Collected: $${metrics.totalCollected}\n`;
+    
+    if (reportType === 'daily') {
+        if (metrics.cashTotal > 0) reportText += `Cash: $${metrics.cashTotal}\n`;
+        if (metrics.payNowTotal > 0) reportText += `PayNow: $${metrics.payNowTotal}\n`;
+    } else {
+        reportText += `Cash: $${metrics.cashTotal}\n`;
+        reportText += `PayNow: $${metrics.payNowTotal}\n`;
+    }
+    
+    reportText += `Total Bookings: ${metrics.totalBookings}\n`;
+    
+    if (reportType === 'daily') {
+        if (tCounts.Booking > 0) reportText += `Booking: ${tCounts.Booking}\n`;
+        if (tCounts.Shop > 0) reportText += `Shop: ${tCounts.Shop}\n`;
+        if (tCounts.ShopB > 0) reportText += `ShopB: ${tCounts.ShopB}\n`;
+        if (tCounts['Walk-in'] > 0) reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+        if (metrics.packageCount > 0) reportText += `Package Count: ${metrics.packageCount}\n`;
+        reportText += `\n`;
+    } else {
+        reportText += `Booking: ${tCounts.Booking}\n`;
+        reportText += `Shop: ${tCounts.Shop}\n`;
+        reportText += `ShopB: ${tCounts.ShopB}\n`;
+        reportText += `Walk-in: ${tCounts['Walk-in']}\n`;
+        reportText += `Package Count: ${metrics.packageCount}\n\n`;
+    }
+
+    if (reportType === 'daily') {
+        reportText += `Staff Summary:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            const uniqueTimes = [...new Set(s.timeSlots)];
+            const timeStr = uniqueTimes.length > 0 ? ` | Time: ${uniqueTimes.join(', ')}` : '';
+            let staffLine = `${s.name}${timeStr}`;
+            
+            if (s.booking > 0) staffLine += ` | Booking: ${s.booking}`;
+            if (s.shop > 0) staffLine += ` | Shop: ${s.shop}`;
+            if (s.shopB > 0) staffLine += ` | ShopB: ${s.shopB}`;
+            if (s.walkIn > 0) staffLine += ` | Walk-in: ${s.walkIn}`;
+            if (s.cash > 0) staffLine += ` | Cash: ${s.cash}`;
+            if (s.payNow > 0) staffLine += ` | PayNow: ${s.payNow}`;
+            staffLine += ` | Total: ${s.totalCollected}\n`;
+            
+            reportText += staffLine;
+        });
+    } else if (reportType === 'weekly') {
+        reportText += `Staff Performance:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            reportText += `${s.name} | Staff Booking: ${s.staffBooking} | Total Amount: ${s.totalCollected}\n`;
+        });
+    } else if (reportType === 'monthly') {
+        reportText += `Monthly Staff Performance:\n`;
+        metrics.staffBreakdown.forEach(s => {
+            reportText += `${s.name} | Staff Booking: ${s.staffBooking || s.booking} | Total Amount: ${s.totalCollected}\n`;
+        });
+
+        reportText += `\nMonthly Cash Flow Summary:\n`;
+        const dailyBreakdown = window.Metrics.getDailyBreakdown(filteredRecords);
+        dailyBreakdown.forEach(d => {
+            reportText += `${formatTelegramDate(d.date)} | PayNow: ${d.payNow} | Cash: ${d.cash} | Total: ${d.totalCollected}\n`;
+        });
+    }
+    
+    return reportText;
+}
